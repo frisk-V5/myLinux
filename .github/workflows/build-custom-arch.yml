@@ -1,0 +1,81 @@
+name: Build Custom Arch Linux ISO
+
+# トリガー条件：GitHubの画面上の「Run workflow」ボタンからの手動実行のみ
+on:
+  workflow_dispatch:
+    inputs:
+      iso_name:
+        description: '作成するISOのアーティファクト名'
+        required: false
+        default: 'custom-archlinux-kde-iso'
+        type: string
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    
+    # archisoのビルド（マウント処理など）には特権モードが必要
+    container:
+      image: archlinux:latest
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update system and install archiso & build tools
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm archiso git base-devel sudo
+
+      - name: Build VS Code from AUR into local repo
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          
+          mkdir -p /tmp/customrepo
+          chown -R builder:builder /tmp/customrepo
+          
+          su - builder -c "
+            cd /tmp
+            git clone https://archlinux.org
+            cd visual-studio-code-bin
+            makepkg -s --noconfirm
+            cp *.pkg.tar.* /tmp/customrepo/
+          "
+          repo-add /tmp/customrepo/customrepo.db.tar.gz /tmp/customrepo/*.pkg.tar.*
+
+      - name: Configure archiso profile
+        run: |
+          cp -r /usr/share/archiso/configs/releng/ /tmp/archlive
+          
+          cat archiso/packages.x86_64 >> /tmp/archlive/packages.x86_64
+          
+          cat << 'EOF' >> /tmp/archlive/pacman.conf
+          [customrepo]
+          SigLevel = Optional TrustAll
+          Server = file:///tmp/customrepo
+          EOF
+
+          mkdir -p /tmp/archlive/airootfs/etc/systemd/system/multi-user.target.wants
+          ln -sf /usr/lib/systemd/system/NetworkManager.service /tmp/archlive/airootfs/etc/systemd/system/multi-user.target.wants/NetworkManager.service
+          ln -sf /usr/lib/systemd/system/sddm.service /tmp/archlive/airootfs/etc/systemd/system/display-manager.service
+
+          mkdir -p /tmp/archlive/airootfs/etc/environment.d
+          cat << 'EOF' > /tmp/archlive/airootfs/etc/environment.d/fcitx5.conf
+          GTK_IM_MODULE=fcitx
+          QT_IM_MODULE=fcitx
+          XMODIFIERS=@im=fcitx
+          EOF
+
+      - name: Build ISO
+        run: |
+          mkdir -p /tmp/work /tmp/out
+          mkarchiso -v -w /tmp/work -o /tmp/out /tmp/archlive
+
+      - name: Upload Custom ISO Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.iso_name }}
+          path: /tmp/out/*.iso
+          retention-days: 5
