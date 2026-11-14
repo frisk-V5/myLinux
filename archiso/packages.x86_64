@@ -1,0 +1,27 @@
+# デスクトップ環境 (KDE Plasma) & ディスプレイマネージャ
+plasma-meta
+konsole
+dolphin
+sddm
+
+# ネットワーク & オーディオ
+networkmanager
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+
+# 日本語入力 (Fcitx5) & フォント
+fcitx5-im
+fcitx5-mozc
+noto-fonts-cjk
+noto-fonts-emoji
+
+# アプリケーション & 開発ツール
+discord
+git
+base-devel
+firefox
+
+# AURからローカルビルドして組み込むパッケージ
+visual-studio-code-bin
